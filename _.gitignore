@@ -1,0 +1,14 @@
+# --- Secretos (NO subir a GitHub) ---
+.env
+.streamlit/secrets.toml
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# --- IDE / sistema ---
+.vscode/
+.idea/
+.DS_Store
