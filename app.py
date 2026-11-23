@@ -44,6 +44,33 @@ def nasa_get(path: str, params: dict, key: str):
     return response.json()
 
 
+# DONKI se movió del gateway api.nasa.gov al CCMC (no requiere API key).
+# Se prueba primero la URL nueva y, si falla, la anterior del CCMC.
+DONKI_URLS = [
+    "https://ccmc.gsfc.nasa.gov/DONKI-API/get",
+    "https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get",
+]
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def donki_get(event: str, start: str, end: str):
+    last_error = None
+    for base in DONKI_URLS:
+        try:
+            r = requests.get(
+                f"{base}/{event}",
+                params={"startDate": start, "endDate": end},
+                timeout=30,
+            )
+            r.raise_for_status()
+            if not r.text.strip():
+                return []
+            return r.json()
+        except (requests.RequestException, ValueError) as e:
+            last_error = e
+    raise last_error
+
+
 # ---------------------------------------------------------------------------
 # Encabezado y barra lateral
 # ---------------------------------------------------------------------------
@@ -163,15 +190,12 @@ with tab_neo:
 # 3) DONKI - Erupciones solares
 # ---------------------------------------------------------------------------
 with tab_flr:
-    days_back = st.slider("Días hacia atrás", 7, 180, 60, key="flr_days")
+    days_back = st.slider("Días hacia atrás (máx. 30)", 7, 30, 30, key="flr_days")
     try:
-        flares = nasa_get(
-            "/DONKI/FLR",
-            {
-                "startDate": (today - timedelta(days=days_back)).isoformat(),
-                "endDate": today.isoformat(),
-            },
-            API_KEY,
+        flares = donki_get(
+            "FLR",
+            (today - timedelta(days=days_back)).isoformat(),
+            today.isoformat(),
         )
         if not flares:
             st.info("No se registraron erupciones en este periodo.")
@@ -198,7 +222,5 @@ with tab_flr:
             )
             cols = [c for c in ["classType", "beginTime", "peakTime", "sourceLocation"] if c in fdf]
             st.dataframe(fdf[cols], use_container_width=True)
-    except requests.HTTPError as e:
-        st.error(f"Error al consultar DONKI: {e}")
-    except requests.RequestException as e:
-        st.error(f"Problema de conexión: {e}")
+    except (requests.RequestException, ValueError) as e:
+        st.error(f"No se pudo consultar DONKI: {e}")
